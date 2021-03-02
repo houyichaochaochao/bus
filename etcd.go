@@ -344,6 +344,7 @@ func (etcd *Etcd) TxWithTTL(key, value string, ttl int64) (txResponse *TxRespons
 	return
 }
 
+// value 本身就代表ip
 func (etcd *Etcd) TxKeepaliveWithTTL(key, value string, ttl int64) (txResponse *TxResponse, err error) {
 
 	var (
@@ -358,6 +359,7 @@ func (etcd *Etcd) TxKeepaliveWithTTL(key, value string, ttl int64) (txResponse *
 
 	leaseID = grantResponse.ID
 
+	// 这一步时间里一个自动维持的长连接
 	if aliveResponses, err = lease.KeepAlive(context.Background(), leaseID); err != nil {
 
 		return
@@ -370,7 +372,7 @@ func (etcd *Etcd) TxKeepaliveWithTTL(key, value string, ttl int64) (txResponse *
 
 	go func() {
 
-		for ch := range aliveResponses {
+		for ch := range aliveResponses { // 没有回应了，才到end 进行重试
 
 			if ch == nil {
 				goto End
@@ -381,9 +383,8 @@ func (etcd *Etcd) TxKeepaliveWithTTL(key, value string, ttl int64) (txResponse *
 	End:
 		log.Printf("the tx keepalive has lose key><----->:%s", key)
 		if txResponse.StateChan!=nil{
-			txResponse.StateChan <- false
+			txResponse.StateChan <- false // 丢失的话回到注册,如果一直失败，就只能上线修复这个问题了，这个节点彻底挂掉了，所以一个好的日志系统也很重要
 		}
-
 	}()
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), etcd.timeout)
@@ -395,16 +396,16 @@ func (etcd *Etcd) TxKeepaliveWithTTL(key, value string, ttl int64) (txResponse *
 		Then(clientv3.OpPut(key, value, clientv3.WithLease(leaseID))).
 		Else(
 			clientv3.OpGet(key),
-		).Commit()
+		).Commit() // 这里是设置和取值 ,到期之后该租约的所有key都会被删除
 
 	if err != nil {
 		_ = lease.Close()
 		return
 	}
 
-	if txnResponse.Succeeded {
+	if txnResponse.Succeeded { // 成功才初始化这个make
 		txResponse.Success = true
-	 	txResponse.StateChan = make(chan bool, 0)
+	 	txResponse.StateChan = make(chan bool, 0) // 这里设计的有点不科学
 	} else {
 		// close the lease
 		_ = lease.Close()
