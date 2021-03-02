@@ -1,0 +1,125 @@
+@startuml
+namespace bus {
+    class Etcd << (S,Aquamarine) >> {
+        - endpoints []string
+        - client *clientv3.Client
+        - kv clientv3.KV
+        - timeout time.Duration
+
+        - handleKeyChangeEvent(event *clientv3.Event, events <font color=blue>chan</font> *KeyChangeEvent) 
+        - transfer(from string, to string, value string) (bool, error)
+
+        + Get(key string) ([]byte, error)
+        + GetWithPrefixKey(prefixKey string) ([][]byte, [][]byte, error)
+        + GetWithPrefixKeyLimit(prefixKey string, limit int64) ([][]byte, [][]byte, error)
+        + Put(key string, value string) error
+        + PutNotExist(key string, value string) (bool, []byte, error)
+        + Update(key string, value string, oldValue string) (bool, error)
+        + Delete(key string) error
+        + DeleteWithPrefixKey(prefixKey string) error
+        + Watch(key string) *WatchKeyChangeResponse
+        + WatchWithPrefixKey(prefixKey string) *WatchKeyChangeResponse
+        + TxWithTTL(key string, value string, ttl int64) (*TxResponse, error)
+        + TxKeepaliveWithTTL(key string, value string, ttl int64) (*TxResponse, error)
+
+    }
+    class ForestClient << (S,Aquamarine) >> {
+        - etcd *Etcd
+        - jobs <font color=blue>map</font>[string]Job
+        - group string
+        - ip string
+        - running bool
+        - quit <font color=blue>chan</font> bool
+        - state int
+        - clientPath string
+        - snapshotPath string
+        - txResponse *TxResponse
+        - snapshotProcessor *JobSnapshotProcessor
+
+        - addJobs() 
+        - validate() error
+        - registerNode() 
+        - lookup() 
+
+        + Bootstrap() error
+        + Stop() 
+        + PushJob(name string, job Job) error
+
+    }
+    interface Job  {
+        - execute(params string) (string, error)
+
+    }
+    class JobExecuteSnapshot << (S,Aquamarine) >> {
+        + Id string
+        + JobId string
+        + Name string
+        + Ip string
+        + Group string
+        + Cron string
+        + Target string
+        + Params string
+        + Mobile string
+        + Remark string
+        + CreateTime string
+        + StartTime string
+        + FinishTime string
+        + Times int
+        + Status int
+        + Result string
+
+    }
+    class JobSnapshot << (S,Aquamarine) >> {
+        + Id string
+        + JobId string
+        + Name string
+        + Ip string
+        + Group string
+        + Cron string
+        + Target string
+        + Params string
+        + Mobile string
+        + Remark string
+        + CreateTime string
+
+    }
+    class JobSnapshotProcessor << (S,Aquamarine) >> {
+        - etcd *Etcd
+        - snapshotPath string
+        - snapshotExecutePath string
+        - snapshots <font color=blue>chan</font> *JobSnapshot
+        - jobs <font color=blue>map</font>[string]Job
+        - lk *sync.RWMutex
+
+        - lookup() 
+        - pushJobSnapshot(snapshot *JobSnapshot) 
+        - handleSnapshot(snapshot *JobSnapshot) 
+
+        + PushJob(name string, job Job) 
+
+    }
+    class KeyChangeEvent << (S,Aquamarine) >> {
+        + Type int
+        + Key string
+        + Value []byte
+
+    }
+    class TxResponse << (S,Aquamarine) >> {
+        + Success bool
+        + LeaseID clientv3.LeaseID
+        + Lease clientv3.Lease
+        + Key string
+        + Value string
+        + StateChan <font color=blue>chan</font> bool
+
+    }
+    class WatchKeyChangeResponse << (S,Aquamarine) >> {
+        + Event <font color=blue>chan</font> *KeyChangeEvent
+        + CancelFunc context.CancelFunc
+        + Watcher clientv3.Watcher
+
+    }
+}
+
+
+@enduml
